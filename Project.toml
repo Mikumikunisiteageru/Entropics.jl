@@ -1,0 +1,4 @@
+name = "MaximumEntropy"
+uuid = "14a948c2-867d-4473-9685-8fa9f340b513"
+authors = ["Yu-Chang Yang <yang.yc.allium@gmail.com>"]
+version = "0.0.1"
