@@ -2,6 +2,10 @@ module MaximumEntropy
 
 export maxent
 
+using Roots: find_zero
+using NLsolve: nlsolve
+using SpecialFunctions: erf
+
 # Known min, max
 function uniform(min_::T, max_::T, left_open=false) where {T <: AbstractFloat}
 	range_ = max_ - min_
@@ -48,6 +52,51 @@ function meantruncexp(lambda, a, b)
 	d = (b - a) / 2
 	a + d * (1 + cothminv(d * lambda))
 end
+
+function me_e_p(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloat}
+	t = 2*mean_ - median_ - (min_+max_)/2
+	d1 = (median_ - min_) / 2
+	d2 = (max_ - median_) / 2
+	f(g) = d1 * cothminv(d1 * g) + d2 * cothminv(d2 * g) - t
+	gamma = find_zero(f, 0)
+	gamma < 1e-10 &&
+		return uniform_piecewise(min_, max_, median_)
+	c1 = gamma / (2 * (exp(median_*gamma) - exp(min_*gamma)))
+	c2 = gamma / (2 * (exp(max_*gamma) - exp(median_*gamma)))
+	x -> min_ <= x <= median_ ? c1 * exp(gamma * x) :
+		 median_ < x <= max_ ? c2 * exp(gamma * x) : 0
+end
+
+phi(x) = exp(-0.5 * x^2) / sqrt(2*pi)
+Phi(x) = 0.5 * (1 + erf(x/sqrt(2)))
+function normal_truncated(min_, max_, mean_, std_)
+	var_ = std_ ^ 2
+	function f!(F, p)
+		mu = p[1]
+		sigma = p[2]
+		alpha = (min_ - mu) / sigma
+		beta = (max_ - mu) / sigma
+		phi_alpha = phi(alpha)
+		phi_beta = phi(beta)
+		z = phi(beta) - phi(alpha)
+		Z = Phi(beta) - Phi(alpha)
+		Q = z / Z
+		F[1] = mu - sigma * Q - mean_
+		F[2] = sigma^2 * (1 + (alpha*phi_alpha - beta*phi_beta)/Z - Q^2) - var_
+	end
+	mu, sigma = nlsolve(f!, [0., 1.]).zero
+	F = zeros(2)
+	f!(F, [mu, sigma])
+	all(abs.(F) .< 1e-8) || error("No solution!")
+	alpha = (min_ - mu) / sigma
+	beta = (max_ - mu) / sigma
+	Z = Phi(beta) - Phi(alpha)
+	# entropy = log(sigma*Z*sqrt(2*pi*exp(1))+(alpha*phi(alpha)-beta*phi(beta))/(2*Z))
+	# println(entropy)
+	x -> min_ <= x <= max_ ?
+		phi((x-mu)/sigma) / (sigma * Z) : 0
+end
+
 
 function maxent(; min=0, max=150, mean=nothing, median=nothing, std=nothing)
 	arg_type = 0b111 - sum(isnothing.((mean, median, std)) .<< (2:-1:0))
