@@ -2,12 +2,12 @@ module MaximumEntropy
 
 export maxent
 
-import Roots: find_zero
-import NLsolve: nlsolve
-import SpecialFunctions: erf
+using Roots: find_zero
+using NLsolve: nlsolve
+using SpecialFunctions: erf
 
 phi(x) = exp(-0.5 * x^2) / sqrt(2*pi)
-Phi(x) = 0.5 * (1 + SpecialFunctions.erf(x/sqrt(2)))
+Phi(x) = 0.5 * (1 + erf(x/sqrt(2)))
 function cothminv(x)
 	abs(x) > 0.5 && return coth(x) - 1/x
 	x * evalpoly(x^2, 
@@ -53,7 +53,7 @@ function me_e(min_::T, max_::T, mean_::T) where {T <: AbstractFloat}
 	t = mean_ - (min_+max_)/2
 	d = (max_ - min_) / 2
 	f(g) = d * cothminv(d * g) - t
-	gamma = Roots.find_zero(f, 0)
+	gamma = find_zero(f, 0)
 	gamma < 1e-10 &&
 		return uniform_piecewise(min_, max_)
 	c = gamma / (exp(max_*gamma) - exp(min_*gamma))
@@ -67,7 +67,7 @@ function me_ep(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloat
 	d1 = (median_ - min_) / 2
 	d2 = (max_ - median_) / 2
 	f(g) = d1 * cothminv(d1 * g) + d2 * cothminv(d2 * g) - t
-	gamma = Roots.find_zero(f, 0)
+	gamma = find_zero(f, 0)
 	gamma < 1e-10 &&
 		return uniform_piecewise(min_, max_, median_)
 	c1 = gamma / (2 * (exp(median_*gamma) - exp(min_*gamma)))
