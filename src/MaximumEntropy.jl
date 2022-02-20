@@ -54,7 +54,7 @@ function me_e(min_::T, max_::T, mean_::T) where {T <: AbstractFloat}
 	d = (max_ - min_) / 2
 	f(g) = d * cothminv(d * g) - t
 	gamma = find_zero(f, 0)
-	gamma < 1e-10 &&
+	gamma < 1e-10 ||
 		return me_u(min_, max_)
 	c = gamma / (exp(max_*gamma) - exp(min_*gamma))
 	x -> min_ <= x <= max_ ? c * exp(gamma * x) : 0
@@ -68,7 +68,7 @@ function me_ep(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloat
 	d2 = (max_ - median_) / 2
 	f(g) = d1 * cothminv(d1 * g) + d2 * cothminv(d2 * g) - t
 	gamma = find_zero(f, 0)
-	gamma < 1e-10 &&
+	gamma < 1e-10 ||
 		return me_up(min_, max_, median_)
 	c1 = gamma / (2 * (exp(median_*gamma) - exp(min_*gamma)))
 	c2 = gamma / (2 * (exp(max_*gamma) - exp(median_*gamma)))
