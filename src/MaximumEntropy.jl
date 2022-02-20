@@ -42,8 +42,8 @@ me_u(min_, max_) = me_u(float(min_), float(max_))
 
 # Known min, max, median
 function me_up(min_::T, max_::T, median_::T) where {T <: AbstractFloat}
-	uniform_1 = uniform(min_, median_)
-	uniform_2 = uniform(medina_, max_, true)
+	uniform_1 = me_u(min_, median_)
+	uniform_2 = me_u(medina_, max_, true)
 	x -> (uniform_1(x) + uniform_2(x)) / 2
 end
 me_up(min_, max_, median_) = me_up(float(min_), float(max_), float(median_))
