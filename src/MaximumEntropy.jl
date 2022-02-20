@@ -2,36 +2,12 @@ module MaximumEntropy
 
 export maxent
 
-using Roots: find_zero
-using NLsolve: nlsolve
-using SpecialFunctions: erf
+import Roots: find_zero
+import NLsolve: nlsolve
+import SpecialFunctions: erf
 
-# Known min, max
-function uniform(min_::T, max_::T, left_open=false) where {T <: AbstractFloat}
-	range_ = max_ - min_
-	isnan(range_) && error("Interval [$min_, $max_] has no meaning!")
-	isinf(range_) && error("Interval [$min_, $max_] has infinite length!")
-	iszero(range_) && error("Interval [$min_, $max_] has zero length!")
-	range_ < 0 && error("Interval [$min_, $max_] is reversed!")
-	if left_open
-		return x -> min_ < x <= max_ ?
-			one(T) / (max_ - min_) : zero(T)
-	else
-		return x -> min_ <= x <= max_ ?
-			one(T) / (max_ - min_) : zero(T)
-	end
-end
-uniform(min_, max_) = uniform(float(min_), float(max_))
-
-# Known min, max, median
-function uniform_piecewise(min_::T, median_::T, max_::T) where {T <: AbstractFloat}
-	uniform_1 = uniform(min_, median_)
-	uniform_2 = uniform(medina_, max_, true)
-	x -> (uniform_1(x) + uniform_2(x)) / 2
-end
-uniform_piecewise(min_, median_, max_) = 
-	uniform_piecewise(float(min_), float(median_), float(max_))
-
+phi(x) = exp(-0.5 * x^2) / sqrt(2*pi)
+Phi(x) = 0.5 * (1 + SpecialFunctions.erf(x/sqrt(2)))
 function cothminv(x)
 	abs(x) > 0.5 && return coth(x) - 1/x
 	x * evalpoly(x^2, 
@@ -47,18 +23,51 @@ function cothminv(x)
 		 +2.5664619702826290e-19, 2.6003696460137274e-20])
 end
 
-function meantruncexp(lambda, a, b)
-	isinf(b) && b > 0 && return a - 1/lambda
-	d = (b - a) / 2
-	a + d * (1 + cothminv(d * lambda))
+# Known min, max
+function me_u(min_::T, max_::T, left_open=false) where {T <: AbstractFloat}
+	range_ = max_ - min_
+	isnan(range_) && error("Interval [$min_, $max_] has no meaning!")
+	isinf(range_) && error("Interval [$min_, $max_] has infinite length!")
+	iszero(range_) && error("Interval [$min_, $max_] has zero length!")
+	range_ < 0 && error("Interval [$min_, $max_] is reversed!")
+	if left_open
+		return x -> min_ < x <= max_ ?
+			one(T) / (max_ - min_) : zero(T)
+	else
+		return x -> min_ <= x <= max_ ?
+			one(T) / (max_ - min_) : zero(T)
+	end
 end
+me_u(min_, max_) = me_u(float(min_), float(max_))
 
-function me_e_p(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloat}
+# Known min, max, median
+function me_up(min_::T, max_::T, median_::T) where {T <: AbstractFloat}
+	uniform_1 = uniform(min_, median_)
+	uniform_2 = uniform(medina_, max_, true)
+	x -> (uniform_1(x) + uniform_2(x)) / 2
+end
+me_up(min_, max_, median_) = me_up(float(min_), float(max_), float(median_))
+
+# Known min, max, mean
+function me_e(min_::T, max_::T, mean_::T) where {T <: AbstractFloat}
+	t = mean_ - (min_+max_)/2
+	d = (max_ - min_) / 2
+	f(g) = d * cothminv(d * g) - t
+	gamma = Roots.find_zero(f, 0)
+	gamma < 1e-10 &&
+		return uniform_piecewise(min_, max_)
+	c = gamma / (exp(max_*gamma) - exp(min_*gamma))
+	x -> min_ <= x <= max_ ? c * exp(gamma * x) : 0
+end
+me_e(min_, max_, mean_) = me_e(float(min_), float(max_), float(mean_))
+
+# Known min, max, mean, median
+function me_ep(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloat}
 	t = 2*mean_ - median_ - (min_+max_)/2
 	d1 = (median_ - min_) / 2
 	d2 = (max_ - median_) / 2
 	f(g) = d1 * cothminv(d1 * g) + d2 * cothminv(d2 * g) - t
-	gamma = find_zero(f, 0)
+	gamma = Roots.find_zero(f, 0)
 	gamma < 1e-10 &&
 		return uniform_piecewise(min_, max_, median_)
 	c1 = gamma / (2 * (exp(median_*gamma) - exp(min_*gamma)))
@@ -66,10 +75,11 @@ function me_e_p(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloa
 	x -> min_ <= x <= median_ ? c1 * exp(gamma * x) :
 		 median_ < x <= max_ ? c2 * exp(gamma * x) : 0
 end
+me_ep(min_, max_, mean_, median_) = 
+	me_ep(float(min_), float(max_), float(mean_), float(median_))
 
-phi(x) = exp(-0.5 * x^2) / sqrt(2*pi)
-Phi(x) = 0.5 * (1 + erf(x/sqrt(2)))
-function normal_truncated(min_, max_, mean_, std_)
+# Known min, max, mean, std
+function me_n(min_::T, max_::T, mean_::T, std_::T) where {T <: AbstractFloat}
 	var_ = std_ ^ 2
 	function f!(F, p)
 		mu = p[1]
@@ -84,7 +94,7 @@ function normal_truncated(min_, max_, mean_, std_)
 		F[1] = mu - sigma * Q - mean_
 		F[2] = sigma^2 * (1 + (alpha*phi_alpha - beta*phi_beta)/Z - Q^2) - var_
 	end
-	mu, sigma = nlsolve(f!, [0., 1.]).zero
+	mu, sigma = NLsolve.nlsolve(f!, [0., 1.]).zero
 	F = zeros(2)
 	f!(F, [mu, sigma])
 	all(abs.(F) .< 1e-8) || error("No solution!")
@@ -96,21 +106,27 @@ function normal_truncated(min_, max_, mean_, std_)
 	x -> min_ <= x <= max_ ?
 		phi((x-mu)/sigma) / (sigma * Z) : 0
 end
-
+me_n(min_, max_, mean_, std_) = 
+	me_n(float(min_), float(max_), float(mean_), float(std_))
 
 function maxent(; min=0, max=150, mean=nothing, median=nothing, std=nothing)
 	arg_type = 0b111 - sum(isnothing.((mean, median, std)) .<< (2:-1:0))
 	if arg_type == 0
-		return uniform(min, max)
+		return me_u(min, max)
 	elseif arg_type == 1
-		error("Argument `std` given with neither `mean` nor `median`!")
+		error("Argument `std` given with no `mean`!")
 	elseif arg_type == 2
-		return uniform_piecewise(min, median, max)
+		return me_up(min, max, median)
 	elseif arg_type == 3
+		error("Argument `std` given with no `mean`!")
 	elseif arg_type == 4
+		return me_e(min, max, mean)
 	elseif arg_type == 5
+		return me_n(min, max, mean, std)
 	elseif arg_type == 6
+		return me_ep(min, max, mean, median)
 	elseif arg_type == 7
+		error("Too complicated!")
 	end
 end
 
