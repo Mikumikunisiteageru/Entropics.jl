@@ -55,7 +55,7 @@ function me_e(min_::T, max_::T, mean_::T) where {T <: AbstractFloat}
 	f(g) = d * cothminv(d * g) - t
 	gamma = find_zero(f, 0)
 	gamma < 1e-10 &&
-		return uniform_piecewise(min_, max_)
+		return me_u(min_, max_)
 	c = gamma / (exp(max_*gamma) - exp(min_*gamma))
 	x -> min_ <= x <= max_ ? c * exp(gamma * x) : 0
 end
@@ -69,7 +69,7 @@ function me_ep(min_::T, max_::T, mean_::T, median_::T) where {T <: AbstractFloat
 	f(g) = d1 * cothminv(d1 * g) + d2 * cothminv(d2 * g) - t
 	gamma = find_zero(f, 0)
 	gamma < 1e-10 &&
-		return uniform_piecewise(min_, max_, median_)
+		return me_up(min_, max_, median_)
 	c1 = gamma / (2 * (exp(median_*gamma) - exp(min_*gamma)))
 	c2 = gamma / (2 * (exp(max_*gamma) - exp(median_*gamma)))
 	x -> min_ <= x <= median_ ? c1 * exp(gamma * x) :
@@ -94,7 +94,7 @@ function me_n(min_::T, max_::T, mean_::T, std_::T) where {T <: AbstractFloat}
 		F[1] = mu - sigma * Q - mean_
 		F[2] = sigma^2 * (1 + (alpha*phi_alpha - beta*phi_beta)/Z - Q^2) - var_
 	end
-	mu, sigma = NLsolve.nlsolve(f!, [0., 1.]).zero
+	mu, sigma = nlsolve(f!, [0., 1.]).zero
 	F = zeros(2)
 	f!(F, [mu, sigma])
 	all(abs.(F) .< 1e-8) || error("No solution!")
