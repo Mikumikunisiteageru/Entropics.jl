@@ -114,11 +114,13 @@ function maxent(; min=0, max=150, mean=nothing, median=nothing, std=nothing)
 	if arg_type == 0
 		return me_u(min, max)
 	elseif arg_type == 1
-		error("Argument `std` given with no `mean`!")
+		# error("Argument `std` given with no `mean`!")
+		return me_u(min, max)
 	elseif arg_type == 2
 		return me_up(min, max, median)
 	elseif arg_type == 3
-		error("Argument `std` given with no `mean`!")
+		# error("Argument `std` given with no `mean`!")
+		return me_up(min, max, median)
 	elseif arg_type == 4
 		return me_e(min, max, mean)
 	elseif arg_type == 5
@@ -126,7 +128,8 @@ function maxent(; min=0, max=150, mean=nothing, median=nothing, std=nothing)
 	elseif arg_type == 6
 		return me_ep(min, max, mean, median)
 	elseif arg_type == 7
-		error("Too complicated!")
+		# error("Too complicated!")
+		return me_ep(min, max, mean, median)
 	end
 end
 
