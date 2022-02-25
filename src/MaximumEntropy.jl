@@ -1,3 +1,6 @@
+# MaximumEntropy.jl
+# 20220220--20220221
+
 module MaximumEntropy
 
 export maxent
