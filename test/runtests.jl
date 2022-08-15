@@ -1,7 +1,7 @@
 # runtests.jl
 # 20220225
 
-using MaximumEntropy
+using Entropics
 using Test
 
 @test !isnothing(maxent(min=0, max=1))
