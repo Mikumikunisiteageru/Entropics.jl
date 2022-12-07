@@ -2,6 +2,8 @@ module Entropics
 
 export maxendist, median, mean, var, entropy, PDF, CDF
 
+using Base.Math: @horner
+
 using NLsolve: nlsolve, converged
 
 using SpecialFunctions: erf, erfi, erfinv
@@ -20,19 +22,37 @@ erfiinv(x::Real) = erfiinv(float(x))
 
 function cothminv(x::T) where {T<:AbstractFloat}
 	abs(x) > 0.5 && return coth(x) - inv(x)
-	return T(x * evalpoly(x^2, 
-		[3.3333333333333333e-01, 2.2222222222222223e-02,
-		 2.1164021164021165e-03, 2.1164021164021165e-04,
-		 2.1377799155576935e-05, 2.1644042808063972e-06,
-		 2.1925947851873778e-07, 2.2214608789979678e-08,
-		 2.2507846516808994e-09, 2.2805151204592183e-10,
-		 2.3106432599002627e-11, 2.3411706819824886e-12,
-		 2.3721017400233653e-13, 2.4034415333307705e-14,
-		 2.4351954029183367e-15, 2.4673688045172075e-16,
-		 2.4999672771220810e-17, 2.5329964357406350e-18,
-		 2.5664619702826290e-19, 2.6003696460137274e-20]))
+	return T(x * @horner(x^2, 
+		3.3333333333333333e-01, 2.2222222222222223e-02,
+		2.1164021164021165e-03, 2.1164021164021165e-04,
+		2.1377799155576935e-05, 2.1644042808063972e-06,
+		2.1925947851873778e-07, 2.2214608789979678e-08,
+		2.2507846516808994e-09, 2.2805151204592183e-10,
+		2.3106432599002627e-11, 2.3411706819824886e-12,
+		2.3721017400233653e-13, 2.4034415333307705e-14,
+		2.4351954029183367e-15, 2.4673688045172075e-16,
+		2.4999672771220810e-17, 2.5329964357406350e-18,
+		2.5664619702826290e-19, 2.6003696460137274e-20))
 end
 cothminv(x::Real) = cothminv(float(x))
+
+function differf(r::Real, l::Real)
+	r == l && return zero(r)
+	r < l && return - differf(l, r)
+	x = (r + l) / 2
+	y = (r - l) / 2
+	1224 * y >= (abs(x) ^ 3.708 + 118) && return erf(r) - erf(l)
+	xx = x ^ 2
+	return y * 2 / sqrt(pi) * exp(-xx) * @horner(y^2, 2, 
+		@horner(xx, -2,4) / 3, 
+		@horner(xx, 3,-12,4) / 15, 
+		@horner(xx, -15,90,-60,8) / 315, 
+		@horner(xx, 105,-840,840,-224,16) / 11340, 
+		@horner(xx, -945,9450,-12600,5040,-720,32) / 623700, 
+		@horner(xx, 10395,-124740,207900,-110880,23760,-2112,64) / 48648600)
+end
+
+### TYPES
 
 abstract type MaxEnDist end
 
@@ -44,7 +64,7 @@ struct CDF{T<:MaxEnDist} <: Function
 	d::T
 end
 
-###
+### KNOWN NOTHING
 
 struct MED000{T<:AbstractFloat} <: MaxEnDist
 	a::T
@@ -60,9 +80,10 @@ entropy(d::MED000) = log(d.b - d.a)
 	p.d.a <= x <= p.d.b ? inv(p.d.b-p.d.a) : zero(T)
 (P::CDF{MED000{T}})(x::Real) where {T<:AbstractFloat} = 
 	P.d.a <= x <= P.d.b ? (T(x)-P.d.a) / (P.d.b-P.d.a) : T(x > P.d.b)
+
 med(a::Real, b::Real, ::Nothing, ::Nothing, ::Nothing) = MED000(a, b)
 
-###
+### KNOWN MEDIAN
 
 struct MED100{T<:AbstractFloat} <: MaxEnDist
 	a::T
@@ -72,8 +93,8 @@ end
 MED100(a::AbstractFloat, b::AbstractFloat, m::AbstractFloat) = 
 	MED100(promote(a, b, m)...)
 MED100(a::Real, b::Real, m::Real) = MED100(float(a), float(b), float(m))
-median(d::MED100)  = m
-mean(d::MED100)    = (a + 2m + b) / 4
+median(d::MED100)  = d.m
+mean(d::MED100)    = (d.a + 2 * d.m + d.b) / 4
 var(d::MED100)     = (5 * (d.b-d.a)^2 + 4 * (d.m-d.a) * (d.m-d.b)) / 48
 entropy(d::MED100) = log(4 * (d.m-d.a) * (d.b-d.m)) / 2
 (p::PDF{MED100{T}})(x::Real) where {T<:AbstractFloat} = 
@@ -82,9 +103,10 @@ entropy(d::MED100) = log(4 * (d.m-d.a) * (d.b-d.m)) / 2
 (P::CDF{MED100{T}})(x::Real) where {T<:AbstractFloat} = 
 	P.d.m <  x <= P.d.b ? (T(x)-P.d.m) / (2 * (P.d.b-P.d.m)) + one(T)/2 : 
 	P.d.a <= x <= P.d.m ? (T(x)-P.d.a) / (2 * (P.d.m-P.d.a)) : T(x > P.d.b)
+
 med(a::Real, b::Real, m::Real, ::Nothing, ::Nothing) = MED100(a, b, m)
 
-###
+### KNOWN MEAN
 
 struct MED010{T<:AbstractFloat} <: MaxEnDist
 	a::T
@@ -92,18 +114,24 @@ struct MED010{T<:AbstractFloat} <: MaxEnDist
 	k::T
 	g::T
 	function MED010(a::T, b::T, g::T) where {T<:AbstractFloat}
-		k = g / (exp(b*g) - exp(a*g))
+		k = g / (exp(a*g) * expm1((b-a)*g))
 		new{T}(a, b, k, g)
 	end
 end
 MED010(a::AbstractFloat, b::AbstractFloat, g::AbstractFloat) = 
 	MED010(promote(a, b, g)...)
 MED010(a::Real, b::Real, g::Real) = MED010(float(a), float(b), float(g))
-median(d::MED010) = log(exp(d.a * d.g) + d.g / (2 * d.k)) / d.g
+median(d::MED010) = abs(d.g) < 1 ? 
+	log1p(expm1(d.a * d.g) + d.g / (2 * d.k)) / d.g : 
+	log(exp(d.a * d.g) + d.g / (2 * d.k)) / d.g
 mean(d::MED010) = 
-	(d.k * (d.b * exp(d.b * d.g) - d.a * exp(d.a * d.g)) - 1) / d.g
-var(d::MED010) = -(2 / d.g + mean(d)) * mean(d) + 
-	d.k / d.g * (d.b^2 * exp(d.b * d.g) - d.a^2 * exp(d.a * d.g))
+	(d.a + d.b + (d.b-d.a) * cothminv((d.b-d.a)/2 * d.g)) / 2
+function var(d::MED010)
+	x = (d.b-d.a)/2 * d.g
+	cmix = cothminv(x)
+	return - mean(d)^2 + 
+		((d.b^2+d.a^2) + (d.b^2-d.a^2) * cmix - (d.b-d.a)^2 * (cmix / x)) / 2
+end
 entropy(d::MED010) = -log(d.k) - d.g * mean(d)
 (p::PDF{MED010{T}})(x::Real) where {T<:AbstractFloat} = 
 	p.d.a <= x <= p.d.b ? p.d.k * exp(p.d.g * T(x)) : zero(T)
@@ -120,10 +148,10 @@ function med(a::Real, b::Real, ::Nothing, u::Real, ::Nothing)
 	solution = nlsolve(f!, [3 * t / d^2], ftol=1e-12)
 	converged(solution) || @warn "Low precision!"
 	g = solution.zero[1]
-	return isapprox(g, 0, atol=1e-10) ? MED000(a, b) : MED010(a, b, g)
+	return iszero(g) ? MED000(a, b) : MED010(a, b, g)
 end
 
-###
+### KNOWN MEDIAN AND MEAN
 
 struct MED110{T<:AbstractFloat} <: MaxEnDist
 	a::T
@@ -134,7 +162,9 @@ struct MED110{T<:AbstractFloat} <: MaxEnDist
 	g::T
 	function MED110(a::T, b::T, m::T, g::T) where {T<:AbstractFloat}
 		ka = g / (2 * (exp(m*g) - exp(a*g)))
+		# ka = g / (exp(a*g) * expm1((m-a)*g))
 		kb = g / (2 * (exp(b*g) - exp(m*g)))
+		# kb = g / (exp(m*g) * expm1((b-m)*g))
 		new{T}(a, b, m, ka, kb, g)
 	end
 end
@@ -143,12 +173,18 @@ MED110(a::AbstractFloat, b::AbstractFloat, m::AbstractFloat,
 MED110(a::Real, b::Real, m::Real, g::Real) = 
 	MED110(float(a), float(b), float(m), float(g))
 median(d::MED110) = d.m
-mean(d::MED110) = 
-	(d.kb * (d.b * exp(d.b * d.g) - d.m * exp(d.m * d.g)) + 
-	 d.ka * (d.m * exp(d.m * d.g) - d.a * exp(d.a * d.g)) - 1) / d.g
-var(d::MED110) = -(2 / d.g + mean(d)) * mean(d) + 
-	(d.kb * (d.b^2 * exp(d.b * d.g) - d.m^2 * exp(d.m * d.g)) + 
-	 d.ka * (d.m^2 * exp(d.m * d.g) - d.a^2 * exp(d.a * d.g))) / d.g
+mean(d::MED110) = (d.a + 2 * d.m + d.b + 
+	(d.m - d.a) * cothminv((d.m-d.a) * d.g / 2) + 
+	(d.b - d.m) * cothminv((d.b-d.m) * d.g / 2)) / 4
+function var(d::MED110)
+	xa = (d.m-d.a)/2 * d.g
+	xb = (d.b-d.m)/2 * d.g
+	cmixa = cothminv(xa)
+	cmixb = cothminv(xb)
+	return - mean(d)^2 + 4 \ 
+		((d.m^2+d.a^2) + (d.m^2-d.a^2) * cmixa - (d.m-d.a)^2 * (cmixa / xa) +
+		 (d.b^2+d.m^2) + (d.b^2-d.m^2) * cmixb - (d.b-d.m)^2 * (cmixb / xb))
+end
 entropy(d::MED110) = -(log(d.ka) + log(d.kb)) / 2 - d.g * mean(d)
 (p::PDF{MED110{T}})(x::Real) where {T<:AbstractFloat} = 
 	p.d.a <= x <= p.d.m ? p.d.ka * exp(p.d.g * T(x)) : 
@@ -171,10 +207,10 @@ function med(a::Real, b::Real, m::Real, u::Real, ::Nothing)
 	solution = nlsolve(f!, [3 * t / (da^2 + db^2)], ftol=1e-12)
 	converged(solution) || @warn "Low precision!"
 	g = solution.zero[1]
-	return isapprox(g, 0, atol=1e-10) ? MED100(a, b, m) : MED110(a, b, m, g)
+	return iszero(g) ? MED100(a, b, m) : MED110(a, b, m, g)
 end
 
-###
+### KNOWN MEAN AND VARIANCE
 
 struct MED011N{T<:AbstractFloat} <: MaxEnDist
 	a::T
@@ -186,7 +222,7 @@ struct MED011N{T<:AbstractFloat} <: MaxEnDist
 	t3::T
 	mu::T
 	function MED011N(a::T, b::T, o::T, s::T) where {T<:AbstractFloat}
-		k = 2 / (sqrt(pi) * s * (erf((b-o)/s) - erf((a-o)/s)))
+		k = 2 / (sqrt(pi) * s * differf((b-o)/s, (a-o)/s))
 		ea = exp(- ((a - o) / s) ^ 2)
 		eb = exp(- ((b - o) / s) ^ 2)
 		khalf = k / 2
@@ -274,12 +310,12 @@ function med(a::Real, b::Real, ::Nothing, u::Real, v::Real)
 	end
 end
 
-###
+### KNOWN VARIANCE
 
 med(a::Real, b::Real, ::Nothing, ::Nothing, v::Real) = 
 	med(a, b, nothing, (a+b)/2, v)
 
-###
+### KNOWN MEDIAN, MEAN, AND VARIANCE
 
 struct MED111N{T<:AbstractFloat} <: MaxEnDist
 	a::T
@@ -293,8 +329,8 @@ struct MED111N{T<:AbstractFloat} <: MaxEnDist
 	t3::T
 	mu::T
 	function MED111N(a::T, b::T, m::T, o::T, s::T) where {T<:AbstractFloat}
-		ka = 1 / (sqrt(pi) * s * (erf((m-o)/s) - erf((a-o)/s)))
-		kb = 1 / (sqrt(pi) * s * (erf((b-o)/s) - erf((m-o)/s)))
+		ka = 1 / (sqrt(pi) * s * differf((m-o)/s, (a-o)/s))
+		kb = 1 / (sqrt(pi) * s * differf((b-o)/s, (m-o)/s))
 		ea = exp(- ((a - o) / s) ^ 2)
 		em = exp(- ((m - o) / s) ^ 2)
 		eb = exp(- ((b - o) / s) ^ 2)
@@ -393,7 +429,15 @@ function med(a::Real, b::Real, m::Real, u::Real, v::Real)
 	end
 end
 
-###
+### KNOWN MEDIAN AND VARIANCE
+
+function med(a::Real, b::Real, m::Real, ::Nothing, v::Real)
+	## TO-DO ##
+	error("Not yet implemented!")
+	## TO-DO ##
+end
+
+### WRAPPER
 
 function xinterval(a::Real, b::Real)
 	(isnan(a) || isnan(b)) && throw(ArgumentError(
@@ -411,7 +455,5 @@ function maxendist(a::Real, b::Real;
 	xinterval(a, b)
 	return med(a, b, median, mean, var)
 end
-
-###
 
 end # module Entropics
