@@ -6,9 +6,18 @@ using Base.Math: @horner
 
 using NLsolve: nlsolve, converged
 
-using SpecialFunctions: erf, erfi, erfinv
+using SpecialFunctions # erf, erfi, erfinv
 
 # MATHEMATIC FUNCTIONS
+
+function SpecialFunctions.erfinv(x::BigFloat; start=zero(BigFloat))
+	function f!(output, param)
+		output[1] = erf(param[1]) - x
+	end
+	solution = nlsolve(f!, BigFloat[start], ftol=min(1e-16, abs(1-x)))
+	converged(solution) || @warn "Low precision!"
+	return solution.zero[1]
+end
 
 function erfiinv(x::T) where {T<:AbstractFloat}
 	iszero(x) && return x
@@ -36,21 +45,10 @@ function cothminv(x::T) where {T<:AbstractFloat}
 end
 cothminv(x::Real) = cothminv(float(x))
 
-function differf(r::Real, l::Real)
-	r == l && return zero(r)
-	r < l && return - differf(l, r)
-	x = (r + l) / 2
-	y = (r - l) / 2
-	1224 * y >= (abs(x) ^ 3.708 + 118) && return erf(r) - erf(l)
-	xx = x ^ 2
-	return y * 2 / sqrt(pi) * exp(-xx) * @horner(y^2, 2, 
-		@horner(xx, -2,4) / 3, 
-		@horner(xx, 3,-12,4) / 15, 
-		@horner(xx, -15,90,-60,8) / 315, 
-		@horner(xx, 105,-840,840,-224,16) / 11340, 
-		@horner(xx, -945,9450,-12600,5040,-720,32) / 623700, 
-		@horner(xx, 10395,-124740,207900,-110880,23760,-2112,64) / 48648600)
-end
+differf(r::T, l::T) where {T<:AbstractFloat} = 
+	T(erf(BigFloat(r)) - erf(BigFloat(l)))
+differf(r::AbstractFloat, l::AbstractFloat) = differf(promote(r, l)...)
+differf(r::Real, l::Real) = differf(float(r), float(l))
 
 ### TYPES
 
@@ -161,10 +159,8 @@ struct MED110{T<:AbstractFloat} <: MaxEnDist
 	kb::T
 	g::T
 	function MED110(a::T, b::T, m::T, g::T) where {T<:AbstractFloat}
-		ka = g / (2 * (exp(m*g) - exp(a*g)))
-		# ka = g / (exp(a*g) * expm1((m-a)*g))
-		kb = g / (2 * (exp(b*g) - exp(m*g)))
-		# kb = g / (exp(m*g) * expm1((b-m)*g))
+		ka = g / (2 * exp(a*g) * expm1((m-a)*g))
+		kb = g / (2 * exp(m*g) * expm1((b-m)*g))
 		new{T}(a, b, m, ka, kb, g)
 	end
 end
@@ -236,8 +232,8 @@ MED011N(a::AbstractFloat, b::AbstractFloat,
 	o::AbstractFloat, s::AbstractFloat) = MED011N(promote(a, b, o, s)...)
 MED011N(a::Real, b::Real, o::Real, s::Real) = 
 	MED011N(float(a), float(b), float(o), float(s))
-median(d::MED011N) = 
-	d.o + d.s * erfinv(erf((d.a-d.o)/d.s) + 1/(sqrt(pi)*d.k*d.s))
+median(d::MED011N{T}) where {T<:AbstractFloat} = 
+	d.o + d.s * T(erfinv(erf(BigFloat(d.a-d.o)/d.s) + 1/(sqrt(pi)*d.k*d.s)))
 mean(d::MED011N) = d.mu
 var(d::MED011N{T}) where {T<:AbstractFloat} = 
 	d.s^2 * (one(T)/2 - d.t3) + (d.o - d.mu) * d.mu
@@ -259,12 +255,12 @@ struct MED011P{T<:AbstractFloat} <: MaxEnDist
 	mu::T
 	function MED011P(a::T, b::T, o::T, s::T) where {T<:AbstractFloat}
 		k = 2 / (sqrt(pi) * s * (erfi((b-o)/s) - erfi((a-o)/s)))
-		ea = exp(((a - o) / s) ^ 2)
-		eb = exp(((b - o) / s) ^ 2)
+		eam1 = expm1(((a - o) / s) ^ 2)
+		ebm1 = expm1(((b - o) / s) ^ 2)
 		khalf = k / 2
-		t2 = khalf * (eb - ea)
-		t3 = khalf * (b * eb - a * ea)
-		mu = o - s^2 * t2
+		t2 = khalf * (ebm1 - eam1)
+		t3 = khalf * (b * ebm1 - a * eam1 + (b-a))
+		mu = o + s^2 * t2
 		new{T}(a, b, k, o, s, t2, t3, mu)
 	end
 end
@@ -274,7 +270,7 @@ MED011P(a::Real, b::Real, o::Real, s::Real) =
 	MED011P(float(a), float(b), float(o), float(s))
 median(d::MED011P) = 
 	d.o + d.s * erfiinv(erfi((d.a-d.o)/d.s) + 1/(sqrt(pi)*d.k*d.s))
-mean(d::MED011P) =  d.mu
+mean(d::MED011P) = d.mu
 var(d::MED011P{T}) where {T<:AbstractFloat} = 
 	d.s^2 * (one(T)/-2 + d.t3) + (d.o - d.mu) * d.mu
 entropy(d::MED011P) = (1 - 2*log(d.k)) / 2 + d.o * d.t2 - d.t3
@@ -291,7 +287,7 @@ function med(a::Real, b::Real, ::Nothing, u::Real, v::Real)
 		return med_010
 	elseif v < var_010
 		function f011n!(outputs, params)
-			d = MED011N(a, b, params[1], params[2])
+			d = MED011N(a, b, params...)
 			outputs[1] = mean(d) - u
 			outputs[2] = var(d) - v
 		end
@@ -300,11 +296,12 @@ function med(a::Real, b::Real, ::Nothing, u::Real, v::Real)
 		return MED011N(a, b, solution.zero...)
 	else # v > var_010
 		function f011p!(outputs, params)
-			d = MED011P(a, b, params[1], params[2])
+			d = MED011P(a, b, params...)
 			outputs[1] = mean(d) - u
 			outputs[2] = var(d) - v
 		end
-		solution = nlsolve(f011p!, [a+b-u, sqrt(2*v)], ftol=1e-12)
+		solution = nlsolve(f011p!, [a+b-u, sqrt(2*v)], 
+			method=:trust_region, ftol=1e-12, autoscale=false, factor=0.001)
 		converged(solution) || @warn "Low precision!"
 		return MED011P(a, b, solution.zero...)
 	end
@@ -423,7 +420,8 @@ function med(a::Real, b::Real, m::Real, u::Real, v::Real)
 			outputs[1] = mean(d) - u
 			outputs[2] = var(d) - v
 		end
-		solution = nlsolve(f111p!, [a+b-u, sqrt(2*v)], ftol=1e-12)
+		solution = nlsolve(f111p!, [a+b-u, sqrt(2*v)], 
+			method=:trust_region, ftol=1e-12, autoscale=false, factor=0.001)
 		converged(solution) || @warn "Low precision!"
 		return MED111P(a, b, m, solution.zero...)
 	end
