@@ -6,7 +6,7 @@ using Base.Math: @horner
 
 using NLsolve: nlsolve, converged
 
-using SpecialFunctions # erf, erfi, erfinv
+using SpecialFunctions # erf, erfc, erfi, erfinv
 
 # MATHEMATIC FUNCTIONS
 
@@ -45,8 +45,15 @@ function cothminv(x::T) where {T<:AbstractFloat}
 end
 cothminv(x::Real) = cothminv(float(x))
 
-differf(r::T, l::T) where {T<:AbstractFloat} = 
-	T(erf(BigFloat(r)) - erf(BigFloat(l)))
+function differf(r::T, l::T) where {T<:AbstractFloat}
+	if xor(signbit(r), signbit(l)) # different signs
+		return erf(r) - erf(l)
+	elseif signbit(r) # both negative
+		return erfc(-r) - erfc(-l)
+	else # both positive
+		return erfc(l) - erfc(r)
+	end
+end
 differf(r::AbstractFloat, l::AbstractFloat) = differf(promote(r, l)...)
 differf(r::Real, l::Real) = differf(float(r), float(l))
 
@@ -291,7 +298,8 @@ function med(a::Real, b::Real, ::Nothing, u::Real, v::Real)
 			outputs[1] = mean(d) - u
 			outputs[2] = var(d) - v
 		end
-		solution = nlsolve(f011n!, [u, sqrt(2*v)], ftol=1e-12)
+		solution = nlsolve(f011n!, [u, sqrt(2*v)], 
+			method=:trust_region, ftol=1e-12, autoscale=false, factor=0.001)
 		converged(solution) || @warn "Low precision!"
 		return MED011N(a, b, solution.zero...)
 	else # v > var_010
@@ -411,7 +419,8 @@ function med(a::Real, b::Real, m::Real, u::Real, v::Real)
 			outputs[1] = mean(d) - u
 			outputs[2] = var(d) - v
 		end
-		solution = nlsolve(f111n!, [u, sqrt(2*v)], ftol=1e-12)
+		solution = nlsolve(f111n!, [u, sqrt(2*v)], 
+			method=:trust_region, ftol=1e-12, autoscale=false, factor=0.001)
 		converged(solution) || @warn "Low precision!"
 		return MED111N(a, b, m, solution.zero...)
 	else # v > var_110
@@ -437,20 +446,70 @@ end
 
 ### WRAPPER
 
-function xinterval(a::Real, b::Real)
-	(isnan(a) || isnan(b)) && throw(ArgumentError(
-		"The endpoints of the interval should be both real numbers!"))
-	(isinf(a) || isinf(b)) && throw(ArgumentError(
-		"Only finite intervals are acceptable!"))
-	a == b && throw(ArgumentError("The interval has zero length!"))
-	a > b && throw(ArgumentError("The interval has reversed endpoints!"))
-	return true
+function xmuv(a::Real, b::Real, m::Real, u::Real, v::Real)
+	## TO-DO ##
 end
+
+function xbhatiadavis(a::Real, b::Real, u::Real, v::Real)
+	vt = (u - a) * (b - u)
+	v > vt && error("It is impossible to satisfy all these conditions!")
+	v == vt && error("These conditions yield a two-point distribution!")
+end
+xbhatiadavis(a::Real, b::Real, ::Nothing, v::Real) = 
+	xbhatiadavis(a, b, (a+b)/2, v)
+xbhatiadavis(::Real, ::Real, ::Any, ::Nothing) = nothing
+
+function xmean(a::Real, b::Real, u::Real)
+	isnan(u) && error("The mean is not real!")
+	a <= u <= b || error("The mean falls out of the support interval!")
+	a < u < b || error("The mean coincides with an endpoint of the interval!")
+end
+xmean(::Real, ::Real, ::Nothing) = nothing
+
+function xmedian(a::Real, b::Real, m::Real)
+	isnan(m) && error("The median is not real!")
+	a <= m <= b || error("The median falls out of the support interval!")
+	a < m < b || 
+		error("The median coincides with an endpoint of the interval!")
+end
+xmedian(::Real, ::Real, ::Nothing) = nothing
+
+function xinterval(a::Real, b::Real)
+	(isnan(a) || isnan(b)) && 
+		error("Endpoint(s) of the interval is/are not real!")
+	(isinf(a) || isinf(b)) && error("The interval is not bounded!")
+	a == b && error("The interval with zero length is degenerated!")
+	a > b && error("The interval is reversed!")
+end
+
+function xvar(v::Real)
+	v < 0 && error("The variance is negative!")
+	v == 0 && error("The variance is zero!")
+end
+xvar(::Nothing) = nothing
+
+function xstd(s::Real)
+	s < 0 && error("The standard deviation is negative!")
+	s == 0 && error("The standard deviation is zero!")
+end
+xstd(::Nothing) = nothing
+
+constdvar(s::Real, v::Real) = isapprox(s^2, v) ? (return v) : 
+	error("The standard deviation and the variance are inconsistent!")
+constdvar(::Nothing, v::Real) = v
+constdvar(s::Real, ::Nothing) = s^2
+constdvar(::Nothing, ::Nothing) = nothing
 
 function maxendist(a::Real, b::Real; 
 		median::Union{Real,Nothing}=nothing, mean::Union{Real,Nothing}=nothing, 
 		std::Union{Real,Nothing}=nothing, var::Union{Real,Nothing}=nothing)
 	xinterval(a, b)
+	xmean(a, b, mean)
+	xmedian(a, b, median)
+	xstd(std)
+	xvar(var)
+	var = constdvar(std, var)
+	xbhatiadavis(a, b, mean, var)
 	return med(a, b, median, mean, var)
 end
 
