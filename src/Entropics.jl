@@ -5,6 +5,7 @@ export maxendist, median, mean, var, entropy, PDF, CDF
 using Base.Math: @horner
 
 using NLsolve: nlsolve, converged
+using Optim: optimize, minimizer, Options
 
 using SpecialFunctions # erf, erfc, erfi, erfinv
 
@@ -438,79 +439,116 @@ end
 
 ### KNOWN MEDIAN AND VARIANCE
 
+function urange(a::Real, b::Real, m::Real, v::Real)
+	s = sqrt(v)
+	l1 = m - s
+	r1 = m + s
+	e = (b - a) ^ 2 / 4 - v
+	l2 = (a+b)/2 + (m-a)/2 - sqrt(e + (m-a)^2/4)
+	r2 = (a+b)/2 - (b-m)/2 + sqrt(e + (b-m)^2/4)
+	return max(l1, l2), min(r1, r2)
+end
+
 function med(a::Real, b::Real, m::Real, ::Nothing, v::Real)
-	## TO-DO ##
-	error("Not yet implemented!")
-	## TO-DO ##
+	l, r = urange(a, b, m, v)
+	h(u) = -entropy(med(a, b, m, u[1], v))
+	result = optimize(h, [l], [r], [(l+r)/2], Fminbox(), Options(g_tol=1e-12))
+	u = minimizer(result)[1]
+	return med(a, b, m, u, v)
 end
 
 ### WRAPPER
 
-function xmuv(a::Real, b::Real, m::Real, u::Real, v::Real)
-	## TO-DO ##
+function maxendist(a::Real, b::Real; 
+		median::Union{Real,Nothing}=nothing, 
+		mean::Union{Real,Nothing}=nothing, 
+		std::Union{Real,Nothing}=nothing, var::Union{Real,Nothing}=nothing)
+	xab(a, b)
+	xabm(a, b, median)
+	xabu(a, b, mean)
+	var = xsv(xs(std), xv(var))
+	xabuv(a, b, mean, var)
+	xabmu(a, b, median, mean)
+	xabmuv(a, b, median, mean, var)
+	return med(a, b, median, mean, var)
 end
 
-function xbhatiadavis(a::Real, b::Real, u::Real, v::Real)
-	vt = (u - a) * (b - u)
-	v > vt && error("It is impossible to satisfy all these conditions!")
-	v == vt && error("These conditions yield a two-point distribution!")
-end
-xbhatiadavis(a::Real, b::Real, ::Nothing, v::Real) = 
-	xbhatiadavis(a, b, (a+b)/2, v)
-xbhatiadavis(::Real, ::Real, ::Any, ::Nothing) = nothing
-
-function xmean(a::Real, b::Real, u::Real)
-	isnan(u) && error("The mean is not real!")
-	a <= u <= b || error("The mean falls out of the support interval!")
-	a < u < b || error("The mean coincides with an endpoint of the interval!")
-end
-xmean(::Real, ::Real, ::Nothing) = nothing
-
-function xmedian(a::Real, b::Real, m::Real)
-	isnan(m) && error("The median is not real!")
-	a <= m <= b || error("The median falls out of the support interval!")
-	a < m < b || 
-		error("The median coincides with an endpoint of the interval!")
-end
-xmedian(::Real, ::Real, ::Nothing) = nothing
-
-function xinterval(a::Real, b::Real)
+function xab(a::Real, b::Real)
 	(isnan(a) || isnan(b)) && 
 		error("Endpoint(s) of the interval is/are not real!")
 	(isinf(a) || isinf(b)) && error("The interval is not bounded!")
-	a == b && error("The interval with zero length is degenerated!")
+	a == b && error("The interval with zero length (one-point distribution)!")
 	a > b && error("The interval is reversed!")
 end
 
-function xvar(v::Real)
-	v < 0 && error("The variance is negative!")
-	v == 0 && error("The variance is zero!")
+function xabm(a::Real, b::Real, m::Real)
+	isnan(m) && error("The median is not real!")
+	a <= m <= b || error("The median falls out of the support interval!")
+	a < m < b || error("These conditions yield a one-point distribution!")
 end
-xvar(::Nothing) = nothing
+xabm(::Real, ::Real, ::Nothing) = nothing
 
-function xstd(s::Real)
+function xabu(a::Real, b::Real, u::Real)
+	isnan(u) && error("The mean is not real!")
+	a <= u <= b || error("The mean falls out of the support interval!")
+	a < u < b || error("These conditions yield a one-point distribution!")
+end
+xabu(::Real, ::Real, ::Nothing) = nothing
+
+function xs(s::Real)
 	s < 0 && error("The standard deviation is negative!")
-	s == 0 && error("The standard deviation is zero!")
+	s == 0 && error("The standard deviation is zero (one-point distribution)!")
+	return s
 end
-xstd(::Nothing) = nothing
+xs(::Nothing) = nothing
 
-constdvar(s::Real, v::Real) = isapprox(s^2, v) ? (return v) : 
+function xv(v::Real)
+	v < 0 && error("The variance is negative!")
+	v == 0 && error("The variance is zero (one-point distribution)!")
+	return v
+end
+xv(::Nothing) = nothing
+
+xsv(s::Real, v::Real) = isapprox(s^2, v) ? (return v) : 
 	error("The standard deviation and the variance are inconsistent!")
-constdvar(::Nothing, v::Real) = v
-constdvar(s::Real, ::Nothing) = s^2
-constdvar(::Nothing, ::Nothing) = nothing
+xsv(::Nothing, v::Real) = v
+xsv(s::Real, ::Nothing) = s^2
+xsv(::Nothing, ::Nothing) = nothing
 
-function maxendist(a::Real, b::Real; 
-		median::Union{Real,Nothing}=nothing, mean::Union{Real,Nothing}=nothing, 
-		std::Union{Real,Nothing}=nothing, var::Union{Real,Nothing}=nothing)
-	xinterval(a, b)
-	xmean(a, b, mean)
-	xmedian(a, b, median)
-	xstd(std)
-	xvar(var)
-	var = constdvar(std, var)
-	xbhatiadavis(a, b, mean, var)
-	return med(a, b, median, mean, var)
+function xabuv(a::Real, b::Real, u::Real, v::Real)
+	vt = (u - a) * (b - u)
+	v > vt && error("The variance is too large under given mean!")
+	v == vt && error("These conditions yield a two-point distribution!")
 end
+function xabuv(a::Real, b::Real, ::Nothing, v::Real)
+	vt = (b - a) ^ 2 / 4
+	v > vt && error("The variance is too large!")
+	v == vt && error("These conditions yield a two-point distribution!")
+end
+xabuv(::Real, ::Real, ::Any, ::Nothing) = nothing
+
+function xabmu(a::Real, b::Real, m::Real, u::Real)
+	a + m > 2 * u && error("The mean is too small under given median!")
+	a + m == 2 * u && 
+		error("These conditions yield a two-point distribution!")
+	2 * u > b + m && error("The mean is too large under given median!")
+	2 * u == b + m && 
+		error("These conditions yield a two-point distribution!")
+end
+xabmu(::Real, ::Real, ::Any, ::Any) = nothing
+
+function xabmuv(a::Real, b::Real, m::Real, u::Real, v::Real)
+	v < (m - u) ^ 2 && 
+		error("The variance is too small under given median and mean!")
+	v == (m - u) ^ 2 && 
+		error("These conditions yield a three-point distribution!")
+	d = u - (a+b)/2
+	vt = (b - a) ^ 2 / 4 + d * (m - d - (d > 0 ? b : a))
+	v > vt && 
+		error("The variance is too large under given median and mean!")
+	v == vt && 
+		error("These conditions yield a three-point distribution!")	
+end
+xabmuv(::Real, ::Real, ::Any, ::Any, ::Any) = nothing
 
 end # module Entropics
