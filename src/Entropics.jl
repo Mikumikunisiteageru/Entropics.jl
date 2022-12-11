@@ -1,6 +1,8 @@
+# src/Entropics.jl
+
 module Entropics
 
-export maxendist, median, mean, var, entropy, PDF, CDF
+export maxendist, median, mean, var, std, entropy, PDF, CDF, pdf, cdf
 
 using Base.Math: @horner
 
@@ -8,6 +10,8 @@ using NLsolve: nlsolve, converged
 using Optim: optimize, minimizer, Options
 
 using SpecialFunctions # erf, erfc, erfi, erfinv
+
+include("smoothing.jl")
 
 # MATHEMATIC FUNCTIONS
 
@@ -457,7 +461,12 @@ function med(a::Real, b::Real, m::Real, ::Nothing, v::Real)
 	return med(a, b, m, u, v)
 end
 
-### WRAPPER
+### WRAPPERS
+
+std(d::MaxEnDist) = sqrt(var(d))
+
+pdf(d::MaxEnDist) = PDF(d)
+cdf(d::MaxEnDist) = CDF(d)
 
 function maxendist(a::Real, b::Real; 
 		median::Union{Real,Nothing}=nothing, 
