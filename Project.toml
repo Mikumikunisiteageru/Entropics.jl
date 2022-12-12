@@ -1,9 +1,10 @@
 name = "Entropics"
 uuid = "14a948c2-867d-4473-9685-8fa9f340b513"
 authors = ["Yu-Chang Yang <yang.yc.allium@gmail.com>"]
-version = "0.2.5"
+version = "0.2.6"
 
 [deps]
+Cuba = "8a292aeb-7a57-582c-b821-06e4c11590b1"
 NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"

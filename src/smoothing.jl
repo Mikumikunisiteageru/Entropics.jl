@@ -1,7 +1,5 @@
 # src/smoothing.jl
 
-import Statistics # median, mean, var, std, quantile
-
 median(v::AbstractVector) = Statistics.median(v)
 mean(v::AbstractVector) = Statistics.mean(v)
 var(v::AbstractVector; corrected::Bool=true) = 
@@ -10,8 +8,6 @@ std(v::AbstractVector; corrected::Bool=true) =
 	Statistics.std(v; corrected=corrected)
 quantile(v::AbstractVector, p; sorted::Bool=false) = 
 	Statistics.quantile(v, p; sorted=sorted)
-
-export smooth
 
 struct Smoothed{T<:AbstractFloat}
 	data::Vector{T}
@@ -56,13 +52,19 @@ function find_h_rot(data::Vector{T}; R::Bool=true) where {T<:AbstractFloat}
 	return c106 * sigma * length(data) ^ (-1/5)
 end
 
-function median(s::Smoothed)
+function quantile(s::Smoothed, p::Real)
+	0 <= p <= 1 || error("The probability given is illegal!")
 	P = CDFSmoothed(s)
-	f!(e, m) = (e[1] = P(m[1]) - 1/2)
-	solution = nlsolve(f!, [median(s.data)], ftol=1e-16)
+	f!(e, m) = (e[1] = P(m[1]) - p)
+	solution = nlsolve(f!, [median(s.data)], ftol=1e-13)
 	converged(solution) || @warn "Low precision!"
 	return solution.zero[1]
 end
+quantile(s::Smoothed, p) = quantile.([s], p)
+
+support(s::Smoothed; epsilon=1e-12) = (quantile(s, [epsilon, 1-epsilon])..., )
+
+median(s::Smoothed{T}) where {T<:AbstractFloat} = quantile(s, T(1/2))
 
 mean(s::Smoothed) = mean(s.data)
 
@@ -79,7 +81,7 @@ struct CDFSmoothed{T<:Smoothed} <: Function
 end
 
 (p::PDFSmoothed)(x::Real) = 
-	mean(@. exp(-((x-p.s.data)/p.s.h)^2)) / (sqrt(2*pi) * p.s.h)
+	mean(@. exp(-((x-p.s.data)/p.s.h)^2/2)) / (sqrt(2*pi) * p.s.h)
 
 (P::CDFSmoothed)(x::Real) = 
 	(1 + mean(@. erf((x-P.s.data)/(P.s.h*sqrt(2))))) / 2
@@ -87,4 +89,54 @@ end
 pdf(s::Smoothed) = PDFSmoothed(s)
 cdf(s::Smoothed) = CDFSmoothed(s)
 
-# TODO: entropy(smt::Smoothed)
+xlog(x::T) where {T<:AbstractFloat} = iszero(x) ? zero(T) : x * log(x)
+xlog(x::Real) = xlog(float(x))
+
+function integrate(f, a, b; abstol=1e-12, reltol=1e-10)
+	d = b - a
+	g(x, y) = y[1] = f(a + d * x[1])
+	result, err = cuhre(g; atol=abstol/d, rtol=reltol)
+	return d * result[1]
+end
+
+function entropy(s::Smoothed; epsilon=1e-12)
+	a, b = support(s; epsilon=epsilon)
+	return - integrate(ComposedFunction(xlog, pdf(s)), a, b)
+end
+
+function kldiverg(s::Smoothed, d::Union{MED000,MED010,MED011N,MED011P})
+	a, b = support(d)
+	pdfs = pdf(s)
+	pdfd = pdf(d)
+	cdfs = cdf(s)
+	ks = cdfs(b) - cdfs(a)
+	p(x) = pdfs(x) / ks
+	q(x) = pdfd(x)
+	f(x) = p(x) * log(p(x) / q(x))
+	return integrate(f, a, b)
+end
+
+function kldiverg(s::Smoothed, d::Union{MED100,MED110,MED111N,MED111P})
+	a, b = support(d)
+	m = d.m
+	pdfs = pdf(s)
+	pdfd = pdf(d)
+	cdfs = cdf(s)
+	ks = cdfs(b) - cdfs(a)
+	p(x) = pdfs(x) / ks
+	q(x) = pdfd(x)
+	f(x) = p(x) * log(p(x) / q(x))
+	return integrate(f, a, m-eps(m)) + integrate(f, m+eps(m), b)
+end
+
+# function kldiverg(d::MaxEnDist, s::Smoothed)
+	# a, b = support(d)
+	# pdfs = pdf(s)
+	# pdfd = pdf(d)
+	# cdfs = cdf(s)
+	# ks = cdfs(b) - cdfs(a)
+	# p(x) = pdfd(x)
+	# q(x) = pdfs(x) / ks
+	# f(x) = p(x) * log(p(x) / q(x))
+	# return integrate(f, a, b)
+# end
