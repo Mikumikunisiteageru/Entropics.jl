@@ -17,6 +17,7 @@ using SpecialFunctions # erf, erfc, erfi, erfinv
 import Statistics # median, mean, var, std, quantile
 
 include("maxendist.jl")
+include("smmaxendist.jl")
 include("smoothing.jl")
 
 end # module Entropics

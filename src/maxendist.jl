@@ -1,6 +1,6 @@
 # src/maxendist.jl
 
-# MATHEMATIC FUNCTIONS
+### MATHEMATIC FUNCTIONS
 
 function SpecialFunctions.erfinv(x::BigFloat; start=zero(BigFloat))
 	function f!(output, param)
@@ -53,7 +53,9 @@ differf(r::Real, l::Real) = differf(float(r), float(l))
 
 abstract type MaxEnDist end
 
-struct PDF{T<:MaxEnDist} <: Function
+abstract type SmMaxEnDist end
+
+struct PDF{T<:Union{MaxEnDist, SmMaxEnDist}} <: Function
 	d::T
 end
 
@@ -452,7 +454,7 @@ end
 
 std(d::MaxEnDist) = sqrt(var(d))
 
-pdf(d::MaxEnDist) = PDF(d)
+pdf(d::Union{MaxEnDist, SmMaxEnDist}) = PDF(d)
 cdf(d::MaxEnDist) = CDF(d)
 
 support(d::MaxEnDist) = (d.a, d.b)

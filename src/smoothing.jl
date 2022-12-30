@@ -118,7 +118,7 @@ end
 
 function kldiverg(s::Smoothed, d::Union{MED100,MED110,MED111N,MED111P})
 	a, b = support(d)
-	m = d.m
+	m = median(d)
 	pdfs = pdf(s)
 	pdfd = pdf(d)
 	cdfs = cdf(s)
@@ -126,17 +126,32 @@ function kldiverg(s::Smoothed, d::Union{MED100,MED110,MED111N,MED111P})
 	p(x) = pdfs(x) / ks
 	q(x) = pdfd(x)
 	f(x) = p(x) * log(p(x) / q(x))
-	return integrate(f, a, m-eps(m)) + integrate(f, m+eps(m), b)
+	return integrate(f, a, m-eps(m)) + integrate(f, m+eps(m), b) + eps(m) * 
+		(f(m-eps(m)) + f(m+eps(m)))
 end
 
-# function kldiverg(d::MaxEnDist, s::Smoothed)
-	# a, b = support(d)
-	# pdfs = pdf(s)
-	# pdfd = pdf(d)
-	# cdfs = cdf(s)
-	# ks = cdfs(b) - cdfs(a)
-	# p(x) = pdfd(x)
-	# q(x) = pdfs(x) / ks
-	# f(x) = p(x) * log(p(x) / q(x))
-	# return integrate(f, a, b)
-# end
+function kldiverg(d::Union{MED000,MED010,MED011N,MED011P}, s::Smoothed)
+	a, b = support(d)
+	pdfs = pdf(s)
+	pdfd = pdf(d)
+	cdfs = cdf(s)
+	ks = cdfs(b) - cdfs(a)
+	p(x) = pdfd(x)
+	q(x) = pdfs(x) / ks
+	f(x) = p(x) * log(p(x) / q(x))
+	return integrate(f, a, b)
+end
+
+function kldiverg(d::Union{MED100,MED110,MED111N,MED111P}, s::Smoothed)
+	a, b = support(d)
+	m = median(d)
+	pdfs = pdf(s)
+	pdfd = pdf(d)
+	cdfs = cdf(s)
+	ks = cdfs(b) - cdfs(a)
+	p(x) = pdfd(x)
+	q(x) = pdfs(x) / ks
+	f(x) = p(x) * log(p(x) / q(x))
+	return integrate(f, a, m-eps(m)) + integrate(f, m+eps(m), b) + eps(m) * 
+		(f(m-eps(m)) + f(m+eps(m)))
+end

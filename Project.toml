@@ -1,7 +1,7 @@
 name = "Entropics"
 uuid = "14a948c2-867d-4473-9685-8fa9f340b513"
 authors = ["Yu-Chang Yang <yang.yc.allium@gmail.com>"]
-version = "0.2.6"
+version = "0.2.7"
 
 [deps]
 Cuba = "8a292aeb-7a57-582c-b821-06e4c11590b1"
