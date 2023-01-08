@@ -2,22 +2,29 @@
 
 module Entropics
 
+export support
+export pdf, cdf
+export mean, moment2, var, std
+export quantile, median
+export entropy
+export sample
 export maxendist
-export median, mean, var, std, entropy, quantile, support, pdf, cdf
-export PDF, CDF # old-fashioned
-export smooth, kldiverg
+export bound
+export smooth
+# export kldiverg
 
 using Base.Math: @horner
+using Base: splat
 
 using Cuba
 using NLsolve: nlsolve, converged
 using Optim: optimize, minimizer, Fminbox, Options
 
 using SpecialFunctions # erf, erfc, erfi, erfinv
-import Statistics # median, mean, var, std, quantile
 
+include("math.jl")
+include("types.jl")
 include("maxendist.jl")
-include("smmaxendist.jl")
-include("smoothing.jl")
+include("sample.jl")
 
 end # module Entropics
