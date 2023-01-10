@@ -5,6 +5,58 @@ using Test
 
 using SpecialFunctions: erf, erfi, erfc
 
+@testset "binaryroot" begin
+	binaryroot = Entropics.binaryroot
+	Pab = Entropics.Pab
+	f(x) = cos(x) - 0.39
+	@test_throws ErrorException binaryroot(f, 0.0, 1.0)
+	@test isapprox(cos(binaryroot(f, 1.0, 2.0)), 0.39)
+	@test_throws ErrorException binaryroot(f, 2.0, 3.0)
+	function g(x)
+		h(t) = erfi(t) - x
+		@test isapprox(erfi(binaryroot(h, 0.0, sqrt(log(1 + x)))), x)
+	end
+	g.([0.01, 0.1, 1])
+	P(x) = Pab(sin, x, 0.0, pi/2)
+	function phi(p)
+		r(x) = P(x) - p
+		isapprox(sin(binaryroot(r, 0.0, pi/2)), p)
+	end
+	@test_throws ErrorException phi(0.0 - 1e-15)
+	@test phi(0.0)
+	@test phi(0.2)
+	@test phi(0.5)
+	@test phi(0.8)
+	@test phi(1.0)
+	@test_throws ErrorException phi(1.0 + 1e-15)
+end
+
+@testset "secantroot" begin
+	secantroot = Entropics.secantroot
+	Pab = Entropics.Pab
+	f(x) = cos(x) - 0.39
+	@test isapprox(cos(secantroot(f, 0.0, 1.0)), 0.39)
+	@test isapprox(cos(secantroot(f, 1.0, 2.0)), 0.39)
+	@test isapprox(cos(secantroot(f, 2.0, 3.0)), 0.39)
+	function g(x)
+		h(t) = erfi(t) - x
+		@test isapprox(erfi(secantroot(h, 0.0, sqrt(log(1 + x)))), x)
+	end
+	g.([0.01, 0.1, 1, 5, 10, 50])
+	P(x) = Pab(sin, x, 0.0, pi/2)
+	function phi(p)
+		r(x) = P(x) - p
+		isapprox(sin(secantroot(r, 0.0, pi/2)), p)
+	end
+	@test_throws ErrorException phi(0.0 - 1e-15)
+	@test phi(0.0)
+	@test phi(0.2)
+	@test phi(0.5)
+	@test phi(0.8)
+	@test phi(1.0)
+	@test_throws ErrorException phi(1.0 + 1e-15)
+end
+
 @testset "integrate" begin
 	integrate = Entropics.integrate
 	@test isapprox(integrate(one, 3.0, 9.0), 6.0)

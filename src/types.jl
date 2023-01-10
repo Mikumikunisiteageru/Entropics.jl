@@ -122,7 +122,7 @@ end
 ### GENERAL QUANTILE
 
 """
-	quantile(d::Distribution, p::Real, x0::Real)
+	quantile(d::Distribution, p::Real, a::Real, b::Real)
 	quantile(d::Distribution, p::Real)
 	quantile(d::Distribution, pp::Vector{<:Real})
 	quantile(d::Distribution)
@@ -130,24 +130,28 @@ end
 Compute the quantile value in a distribution. The last syntax creates a Julia 
 function similar to those from `pdf` and `cdf` that maps `p` to `q(d, p)`.
 """
-function quantile(d::Distribution{T}, p::T, x0::T) where {T<:AbstractFloat}
+function quantile(d::Distribution{T}, p::T, 
+		a::T, b::T) where {T<:AbstractFloat}
 	0 <= p <= 1 || error("The probability given is illegal!")
-	Pcdf = cdf(d)
-	ppdf = pdf(d)
-	f!(e, x) = (e[1] = Pcdf(x[1]) - p)
-	j!(j, x) = (j[1] = ppdf(x[1]))
-	solution = nlsolve(f!, j!, [x0], method=:newton, ftol=1e-13)
-	converged(solution) || @warn "Low precision!"
-	return solution.zero[1]
+	P = cdf(d)
+	f(x) = P(x) - p
+	return secantroot(f, a, b)
 end
-quantile(d::Distribution{T}, p::Real, x0::Real) where {T<:AbstractFloat} = 
-	quantile(d, T(p), T(x0))
-quantile(d::Distribution{T}, p::T) where {T<:AbstractFloat} = 
-	quantile(d, p, mean(d))
-function quantile(d::Bounded{T}, p::T) where {T<:AbstractFloat}
-	a, b = support(d)
-	return max(a, min(b, quantile(d, p, a + p * (b - a))))
+function quantile(d::Bounded{T}, p::T, 
+		a::T, b::T) where {T<:AbstractFloat}
+	0 <= p <= 1 || error("The probability given is illegal!")
+	P = cdf(d)
+	f(x) = P(x) - p
+	return binaryroot(f, a, b)
 end
+quantile(d::Distribution{T}, p::Real, a::Real, b::Real) where 
+	{T<:AbstractFloat} = quantile(d, T(p), T(a), T(b))
+function quantile(d::Distribution{T}, p::T) where {T<:AbstractFloat}
+	u, s = mean(d), std(d)
+	return quantile(d, p, u - s, u + s)
+end
+quantile(d::Bounded{T}, p::T) where {T<:AbstractFloat} = 
+	quantile(d, p, support(d)...)
 quantile(d::Distribution{T}, p::Real) where {T<:AbstractFloat} = 
 	quantile(d, T(p))
 quantile(d::Distribution, pp::Vector{<:Real}) = quantile.([d], pp)

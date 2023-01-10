@@ -1,6 +1,51 @@
 # src/math.jl
 
 """
+	binaryroot(f::Function, a::Real, b::Real)
+
+Solve the equation ``f(x) = 0`` using binary search method.
+"""
+function binaryroot(f::Function, a::T, b::T) where {T<:AbstractFloat}
+	fa, fb = f(a), f(b)
+	iszero(fa) && return a
+	iszero(fb) && return b
+	sa, sb = signbit(fa), signbit(fb)
+	xor(sa, sb) || error("`f(a)` and `f(b)` have the same sign!")
+	while ! isapprox(a, b, rtol=eps(T)*2)
+		m = (a + b) / 2
+		fm = f(m)
+		sm = signbit(fm)
+		if xor(sa, sm)
+			b, fb, sb = m, fm, sm
+		else
+			a, fa, sa = m, fm, sm
+		end
+	end
+	return (a + b) / 2
+end
+
+"""
+	secantroot(f::Function, a::Real, b::Real)
+
+Solve the equation ``f(x) = 0`` using secant method from given initial values.
+"""
+function secantroot(f::Function, a::T, b::T) where {T<:AbstractFloat}
+	fa = f(a)
+	fb = f(b)
+	e = eps(T)
+	while ! isapprox(a, b; rtol=e*2)
+		isapprox(fa, fb; rtol=e*10) && 
+			(abs(fb) < e ? (return b) : error("Bad initial values!"))
+		m = b - (b-a) / (fb-fa) * fb
+		a, fa, b, fb = b, fb, m, f(m)
+	end
+	return b
+end
+secantroot(f::Function, a::AbstractFloat, b::AbstractFloat) = 
+	secantroot(f, promote(a, b)...)
+secantroot(f::Function, a::Real, b::Real) = secantroot(f, float(a), float(b))
+
+"""
 	integrate(f, a, b; abstol=1e-12, reltol=1e-12)
 
 Compute ``\\int_a^b f(x) \\operatorname{d}x`` with Cuhre algorithm in Cuba.jl.
