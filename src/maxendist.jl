@@ -274,7 +274,6 @@ function med110(a::T, b::T, m::T, u::T) where {T<:AbstractFloat}
 	B = solution.zero[1]
 	return iszero(B) ? MED100(a, b, m) : MED110(a, b, m, B)
 end
-
 med110(a::AbstractFloat, b::AbstractFloat, m::AbstractFloat, 
 	u::AbstractFloat) = med110(promote(a, b, m, u)...)
 med110(a::Real, b::Real, m::Real, u::Real) = 
@@ -339,7 +338,7 @@ med(a::Real, b::Real, m::Real, u::Real, v::Real) = med111(a, b, m, u, v)
 Return the possible range of mean of a distribution bounded on ``[a, b]`` 
 with median `m` and variance `v` as an interval ``(ul, ur)``.
 """
-function urange(a::Real, b::Real, m::Real, v::Real)
+function urange(a::T, b::T, m::T, v::T) where {T<:AbstractFloat}
 	s = sqrt(v)
 	l1 = m - s
 	r1 = m + s
@@ -348,14 +347,36 @@ function urange(a::Real, b::Real, m::Real, v::Real)
 	r2 = (a+b)/2 - (b-m)/2 + sqrt(e + (b-m)^2/4)
 	return max(l1, l2), min(r1, r2)
 end
+urange(a::AbstractFloat, b::AbstractFloat, m::AbstractFloat, 
+	v::AbstractFloat) = urange(promote(a, b, m, v)...)
+urange(a::Real, b::Real, m::Real, v::Real) = 
+	urange(float(a), float(b), float(m), float(v))
 
-function med(a::Real, b::Real, m::Real, ::Nothing, v::Real)
-	l, r = urange(a, b, m, v)
-	h(u) = -entropy(med(a, b, m, u[1], v))
-	result = optimize(h, [l], [r], [(l+r)/2], Fminbox(), Options(g_tol=1e-12))
-	u = minimizer(result)[1]
-	return med(a, b, m, u, v)
+function med101f(mf::T, vf::T) where {T<:AbstractFloat}
+	af, bf = zero(T), one(T)
+	lf, rf = urange(af, bf, mf, vf)
+	h(uf) = -entropy(med111(af, bf, mf, uf[1], vf))
+	result = optimize(h, [lf], [rf], [(lf+rf)/2], 
+		Fminbox(), Options(g_tol=1e-12))
+	uf = minimizer(result)[1]
+	return med111(af, bf, mf, uf, vf)
 end
+med101f(mf::AbstractFloat, vf::AbstractFloat) = med101f(promote(mf, vf)...)
+med101f(mf::Real, vf::Real) = med101f(float(mf), float(vf))
+
+function med101(a::T, b::T, m::T, v::T) where {T<:AbstractFloat}
+	len = b - a
+	medf = med101f((m-a) / len, v / len^2)
+	At = A(medf) / len^2
+	Bt = B(medf) / len - 2 * a * At
+	return MED111(a, b, m, At, Bt)
+end
+med101(a::AbstractFloat, b::AbstractFloat, m::AbstractFloat, 
+	v::AbstractFloat) = med101(promote(a, b, m, v)...)
+med101(a::Real, b::Real, m::Real, v::Real) = 
+	med101(float(a), float(b), float(m), float(v))
+
+med(a::Real, b::Real, m::Real, ::Nothing, v::Real) = med101(a, b, m, v)
 
 ### THE MAIN FUNCTION WITH BOUND CHECKING
 
