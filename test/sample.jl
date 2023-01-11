@@ -124,6 +124,24 @@ end
 	@test isapprox(-Inf, entropy(sample([3, 5, 9])))
 end
 
+@testset "skewness" begin
+	@test isapprox(0.0, skewness(sample([3, 9])))
+	@test isapprox(5/49*sqrt(14), skewness(sample([3, 5, 9])))
+end
+
+@testset "kurtosis" begin
+	@test isapprox(1.0, kurtosis(sample([3, 9])))
+	@test isapprox(3/2, kurtosis(sample([3, 5, 9])))
+end
+
+@testset "rescale" begin
+	@test all(isapprox.([0.0, 1.0], rescale(sample([3, 9])).v))
+	@test all(isapprox.([0.0, 1/3, 1.0], rescale(sample([3, 5, 9])).v))
+	@test all(isapprox.([2.0, 5.0], rescale(sample([3, 9]); a=2, b=5).v))
+	@test all(isapprox.([2.0, 3.0, 5.0], 
+		rescale(sample([3, 5, 9]); a=2, b=5).v))
+end
+
 @testset "bound" begin
 	s = sample([3, 2, 1, 4])
 	@test all((===).(bound(s, 0, 5).v, [1.0, 2.0, 3.0, 4.0]))
@@ -201,6 +219,8 @@ end
 	@test isapprox(var(b), 15.020912499505704)
 	@test isapprox(std(b), 3.875682197949892)
 	@test isapprox(entropy(b), 2.6474740912679264)
+	@test isapprox(skewness(b), 0.0; atol=1e-15)
+	@test isapprox(kurtosis(b), 3.5111529780370745)
 	p = pdf(b)
 	@test isapprox(p(prevfloat(-10.0)), 0.0)
 	@test isapprox(p(-10.0), 0.019438319076347854)

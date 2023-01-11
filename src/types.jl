@@ -232,6 +232,22 @@ Compute the differential entropy of a bounded distribution.
 """
 entropy(d::Bounded) = - integrate(x -> xlog(pdf(d)(x)), support(d)...)
 
+"""
+	skewness(d::Bounded; u=mean(d), s=std(d))
+
+Compute the skewness of a bounded distribution. 
+"""
+skewness(d::Bounded; u=mean(d), s=std(d)) = 
+	integrate(x -> ((x-u)/s)^3 * pdf(d)(x), support(d)...)
+
+"""
+	kurtosis(d::Bounded; u=mean(d), s=std(d))
+
+Compute the kurtosis of a bounded distribution. 
+"""
+kurtosis(d::Bounded; u=mean(d), s=std(d)) = 
+	integrate(x -> ((x-u)/s)^4 * pdf(d)(x), support(d)...)
+
 ### BOUNDING
 
 struct Bound{T<:AbstractFloat, D<:Distribution{T}} <: Bounded{T}

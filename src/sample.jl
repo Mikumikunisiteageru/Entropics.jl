@@ -51,6 +51,15 @@ var(d::Sample; u=mean(d)) = sum((d.v .- u) .^ 2) / length(d.v)
 
 entropy(d::Sample{T}) where {T<:AbstractFloat} = typemin(T)
 
+skewness(d::Sample; u=mean(d), s=std(d)) = sum(((d.v.-u)./s).^3) / length(d.v)
+
+kurtosis(d::Sample; u=mean(d), s=std(d)) = sum(((d.v.-u)./s).^4) / length(d.v)
+
+function rescale(d::Sample{T}; a=zero(T), b=one(T)) where {T<:AbstractFloat}
+	da, db = support(d)
+	return sample((d.v .- da) .* (T(b - a) / (db - da)) .+ T(a))
+end
+
 ### WHEN BOUNDED
 
 function bound(d::Sample{T}, a::T, b::T) where {T<:AbstractFloat}

@@ -7,6 +7,8 @@ export pdf, cdf
 export mean, moment2, var, std
 export quantile, median
 export entropy
+export skewness, kurtosis
+export rescale
 export sample
 export maxendist
 export bound
