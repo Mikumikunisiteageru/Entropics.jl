@@ -448,7 +448,7 @@ xabu(::Real, ::Real, ::Nothing) = nothing
 Check if standard deviation `s` is possible for a continuous distribution.
 """
 function xs(s::Real)
-	isnan(u) && error("The standard deviation is not real!")
+	isnan(s) && error("The standard deviation is not real!")
 	s < 0 && error("The standard deviation is negative!")
 	s == 0 && error("The standard deviation is zero (one-point distribution)!")
 	return s
